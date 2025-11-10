@@ -24,13 +24,13 @@ import {
 const WORDS_PER_LEVEL = 10;
 const POINTS_PER_WORD = 2;
 const INITIAL_TIME = 60; // Default game time in seconds
-const LIVES = 3;
 
 const DIFFICULTY_SETTINGS = {
-  easy: { baseSpeed: 0.8, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
-  medium: { baseSpeed: 1.2, increment: 0.15, spawnRate: 2000, spawnDecrement: 75 },
-  hard: { baseSpeed: 1.5, increment: 0.2, spawnRate: 1500, spawnDecrement: 100 },
+  easy: { baseSpeed: 0.5, increment: 0.05, spawnRate: 3000, spawnDecrement: 50 },
+  medium: { baseSpeed: 0.8, increment: 0.075, spawnRate: 2500, spawnDecrement: 75 },
+  hard: { baseSpeed: 1.2, increment: 0.1, spawnRate: 2000, spawnDecrement: 100 },
 };
+
 
 const MIN_SPAWN_RATE = 500;
 
@@ -109,14 +109,14 @@ export default function TypeFallGame() {
       animationFrameId.current = requestAnimationFrame(gameLoop);
       return;
     }
-    
+
     setActiveWords(currentWords => {
         const gameHeight = gameAreaRef.current?.offsetHeight ?? 0;
-        let missedWordThisFrame = false;
+        let wordsMissed = 0;
 
         const updatedWords = currentWords.filter(word => {
             if (word.y >= gameHeight) {
-                missedWordThisFrame = true;
+                wordsMissed++;
                 return false; 
             }
             return true;
@@ -125,7 +125,7 @@ export default function TypeFallGame() {
             y: word.y + word.speed,
         }));
         
-        if (missedWordThisFrame) {
+        if (wordsMissed > 0) {
             // This logic is now outside the filter/map, ensuring it runs once per frame if any word is missed.
         }
 
@@ -305,7 +305,7 @@ export default function TypeFallGame() {
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground font-headline overflow-hidden">
       {gameState === 'menu' && (
-        <Card className="w-full max-w-2xl text-center bg-card/80 backdrop-blur-sm animate-fade-in-up">
+        <Card className="w-full max-w-md text-center bg-card/80 backdrop-blur-sm animate-fade-in-up">
           <CardHeader>
             <CardTitle className="text-5xl font-bold text-primary" style={{textShadow: '0 0 10px hsl(var(--primary))'}}>TypeFall Challenge</CardTitle>
           </CardHeader>
@@ -315,7 +315,7 @@ export default function TypeFallGame() {
               <Star className="w-7 h-7"/>
               <span className="font-bold">High Score: {highScore}</span>
             </div>
-            <div className="grid sm:grid-cols-2 gap-8 mb-8">
+            <div className="flex flex-col gap-8 mb-8">
               <div className='text-left'>
                 <Label className="font-bold text-lg mb-2 block">Difficulty</Label>
                 <ToggleGroup 
@@ -426,5 +426,3 @@ export default function TypeFallGame() {
     </main>
   );
 }
-
-    
