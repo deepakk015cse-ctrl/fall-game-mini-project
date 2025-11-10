@@ -24,9 +24,9 @@ const INITIAL_LIVES = 5;
 const WORDS_PER_LEVEL = 10;
 
 const DIFFICULTY_SETTINGS = {
-  easy: { baseSpeed: 1.5, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
-  medium: { baseSpeed: 2.5, increment: 0.15, spawnRate: 2000, spawnDecrement: 75 },
-  hard: { baseSpeed: 4, increment: 0.2, spawnRate: 1500, spawnDecrement: 100 },
+  easy: { baseSpeed: 0.5, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
+  medium: { baseSpeed: 1.0, increment: 0.15, spawnRate: 2000, spawnDecrement: 75 },
+  hard: { baseSpeed: 1.5, increment: 0.2, spawnRate: 1500, spawnDecrement: 100 },
 };
 
 const MIN_SPAWN_RATE = 500;
@@ -99,29 +99,24 @@ export default function TypeFallGame() {
     }
 
     const gameHeight = gameAreaRef.current?.offsetHeight ?? 0;
-    
-    setActiveWords(prevWords => {
-      const newWords: Word[] = [];
-      let livesToLose = 0;
+    let livesToLose = 0;
 
-      for (const word of prevWords) {
-        const newY = word.y + word.speed;
-        if (newY >= gameHeight) {
-          livesToLose++;
-        } else {
-          newWords.push({ ...word, y: newY });
+    const remainingWords = activeWords.filter(word => {
+        if (word.y >= gameHeight) {
+            livesToLose++;
+            return false;
         }
-      }
+        return true;
+    }).map(word => ({ ...word, y: word.y + word.speed }));
 
-      if (livesToLose > 0) {
+    if (livesToLose > 0) {
         setLives(prevLives => Math.max(0, prevLives - livesToLose));
-      }
-      
-      return newWords;
-    });
+    }
+    
+    setActiveWords(remainingWords);
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [isPaused, gameState, wordSpeed]);
+  }, [isPaused, gameState, wordSpeed, activeWords]);
 
 
   useEffect(() => {
