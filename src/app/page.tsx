@@ -2,10 +2,11 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Heart, Trophy, Pause, Play, Settings, RefreshCw } from 'lucide-react';
+import { Trophy, Clock, Pause, Play, Settings, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { WORDS } from '@/lib/words';
 import { cn } from '@/lib/utils';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -20,9 +21,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-const INITIAL_LIVES = 5;
 const WORDS_PER_LEVEL = 10;
 const POINTS_PER_WORD = 2;
+const INITIAL_TIME = 60; // Default game time in seconds
 
 const DIFFICULTY_SETTINGS = {
   easy: { baseSpeed: 0.8, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
@@ -44,7 +45,8 @@ export default function TypeFallGame() {
   const [gameState, setGameState] = useState<'menu' | 'playing' | 'gameOver'>('menu');
   const [isPaused, setIsPaused] = useState(false);
   const [score, setScore] = useState(0);
-  const [lives, setLives] = useState(INITIAL_LIVES);
+  const [timeRemaining, setTimeRemaining] = useState(INITIAL_TIME);
+  const [gameDuration, setGameDuration] = useState(INITIAL_TIME);
   const [activeWords, setActiveWords] = useState<Word[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [level, setLevel] = useState(1);
@@ -56,15 +58,16 @@ export default function TypeFallGame() {
   const lastWordId = useRef(0);
   const animationFrameId = useRef<number>();
   const spawnTimeoutId = useRef<NodeJS.Timeout>();
-
+  const timerIntervalId = useRef<NodeJS.Timeout>();
 
   const { baseSpeed, increment, spawnRate: baseSpawnRate, spawnDecrement } = DIFFICULTY_SETTINGS[difficulty];
   const spawnRate = Math.max(MIN_SPAWN_RATE, baseSpawnRate - (level - 1) * spawnDecrement);
   const wordSpeed = baseSpeed + (level - 1) * increment;
 
-  const resetGame = useCallback((newDifficulty = difficulty) => {
+  const resetGame = useCallback((newDifficulty = difficulty, newDuration = gameDuration) => {
     setScore(0);
-    setLives(INITIAL_LIVES);
+    setTimeRemaining(newDuration);
+    setGameDuration(newDuration);
     setActiveWords([]);
     setInputValue('');
     setLevel(1);
@@ -73,15 +76,13 @@ export default function TypeFallGame() {
     setDifficulty(newDifficulty);
     lastWordId.current = 0;
     setTimeout(() => inputRef.current?.focus(), 0);
-  }, [difficulty]);
-
+  }, [difficulty, gameDuration]);
 
   const spawnWord = useCallback(() => {
     if (!gameAreaRef.current) return;
     const gameWidth = gameAreaRef.current.offsetWidth;
     const text = WORDS[Math.floor(Math.random() * WORDS.length)];
-    // A simple approximation for word width
-    const wordWidth = text.length * 12;
+    const wordWidth = text.length * 12; // A simple approximation for word width
     
     const newWord: Word = {
       id: lastWordId.current++,
@@ -99,17 +100,12 @@ export default function TypeFallGame() {
       return;
     }
   
-    let livesToLose = 0;
-    const missedWords: number[] = [];
-
     setActiveWords(prevWords => {
       const gameHeight = gameAreaRef.current?.offsetHeight ?? 0;
       
       const updatedWords = prevWords.map(word => {
         if (word.y >= gameHeight) {
-          livesToLose++;
-          missedWords.push(word.id);
-          return null;
+          return null; // Word is missed, will be filtered out
         }
         return {
           ...word,
@@ -117,10 +113,6 @@ export default function TypeFallGame() {
         };
       }).filter(Boolean) as Word[];
       
-      if (livesToLose > 0) {
-        setLives(prevLives => Math.max(0, prevLives - livesToLose));
-      }
-  
       return updatedWords;
     });
   
@@ -132,24 +124,29 @@ export default function TypeFallGame() {
     if (gameState === 'playing' && !isPaused) {
       animationFrameId.current = requestAnimationFrame(gameLoop);
       spawnTimeoutId.current = setInterval(spawnWord, spawnRate);
+      timerIntervalId.current = setInterval(() => {
+        setTimeRemaining(prev => Math.max(0, prev - 1));
+      }, 1000);
       inputRef.current?.focus();
     } else {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
       if (spawnTimeoutId.current) clearInterval(spawnTimeoutId.current);
+      if (timerIntervalId.current) clearInterval(timerIntervalId.current);
     }
     
     return () => {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
       if (spawnTimeoutId.current) clearInterval(spawnTimeoutId.current);
+      if (timerIntervalId.current) clearInterval(timerIntervalId.current);
     };
   }, [gameState, isPaused, spawnRate, gameLoop, spawnWord]);
 
 
   useEffect(() => {
-    if (lives <= 0) {
+    if (timeRemaining <= 0 && gameState === 'playing') {
       setGameState('gameOver');
     }
-  }, [lives]);
+  }, [timeRemaining, gameState]);
   
   useEffect(() => {
     if (score > 0 && score % (WORDS_PER_LEVEL * POINTS_PER_WORD) === 0) {
@@ -183,14 +180,13 @@ export default function TypeFallGame() {
       const matchedIndex = activeWords.findIndex((word) => word.text === inputValue);
 
       if (matchedIndex !== -1) {
-        // Prevent life loss if word is already off-screen but not yet removed from state
         if (gameAreaRef.current && activeWords[matchedIndex].y < gameAreaRef.current.offsetHeight) {
             setScore((prev) => prev + POINTS_PER_WORD);
             setActiveWords((prev) => prev.filter((_, i) => i !== matchedIndex));
             setInputValue('');
         }
       } else {
-        setLives((prevLives) => Math.max(0, prevLives - 1));
+        // Optional: penalty for wrong word, e.g., reduce time
         setInputValue('');
       }
     }
@@ -205,7 +201,17 @@ export default function TypeFallGame() {
     if (value) {
       setDifficulty(value);
       if (gameState === 'playing') {
-        resetGame(value);
+        resetGame(value, gameDuration);
+      }
+    }
+  }
+
+  const handleDurationChange = (value: string) => {
+    const newDuration = parseInt(value, 10);
+    if (!isNaN(newDuration)) {
+      setGameDuration(newDuration);
+      if (gameState === 'playing') {
+        resetGame(difficulty, newDuration);
       }
     }
   }
@@ -224,7 +230,7 @@ export default function TypeFallGame() {
           {isPaused ? <Play className="mr-2 h-4 w-4" /> : <Pause className="mr-2 h-4 w-4" />}
           <span>{isPaused ? 'Resume' : 'Pause'}</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => resetGame(difficulty)}>
+        <DropdownMenuItem onSelect={() => resetGame(difficulty, gameDuration)}>
           <RefreshCw className="mr-2 h-4 w-4" />
           <span>Restart</span>
         </DropdownMenuItem>
@@ -235,9 +241,23 @@ export default function TypeFallGame() {
           <DropdownMenuRadioItem value="medium">Medium</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="hard">Hard</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Game Duration</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={String(gameDuration)} onValueChange={handleDurationChange}>
+          <DropdownMenuRadioItem value="30">30s</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="60">60s</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="90">90s</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="120">120s</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
+  
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
 
   const renderGameStats = () => (
     <div className="absolute top-4 left-4 right-4 flex justify-between items-center text-accent z-10 p-4 bg-background/50 rounded-lg backdrop-blur-sm">
@@ -249,13 +269,9 @@ export default function TypeFallGame() {
         <div className="text-xl font-bold text-muted-foreground">Level: {level}</div>
       </div>
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-            {Array.from({ length: lives }).map((_, i) => (
-            <Heart key={i} className="w-8 h-8 text-primary fill-primary" style={{filter: 'drop-shadow(0 0 5px hsl(var(--primary)))'}} />
-            ))}
-            {Array.from({ length: INITIAL_LIVES - lives }).map((_, i) => (
-            <Heart key={i} className="w-8 h-8 text-gray-600" />
-            ))}
+        <div className="flex items-center gap-2 text-2xl font-bold" style={{textShadow: '0 0 8px hsl(var(--primary))'}}>
+            <Clock className="w-7 h-7" />
+            <span>{formatTime(timeRemaining)}</span>
         </div>
         {renderGameMenu()}
       </div>
@@ -265,25 +281,46 @@ export default function TypeFallGame() {
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground font-headline overflow-hidden">
       {gameState === 'menu' && (
-        <Card className="w-full max-w-md text-center bg-card/80 backdrop-blur-sm animate-fade-in-up">
+        <Card className="w-full max-w-lg text-center bg-card/80 backdrop-blur-sm animate-fade-in-up">
           <CardHeader>
             <CardTitle className="text-5xl font-bold text-primary" style={{textShadow: '0 0 10px hsl(var(--primary))'}}>TypeFall Challenge</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground mb-6">Type the falling words before they hit the bottom. Select your difficulty and start the challenge!</p>
-            <ToggleGroup 
-              type="single" 
-              value={difficulty} 
-              onValueChange={(value: 'easy' | 'medium' | 'hard') => value && setDifficulty(value)}
-              className="mb-8 justify-center"
-            >
-              <ToggleGroupItem value="easy">Easy</ToggleGroupItem>
-              <ToggleGroupItem value="medium">Medium</ToggleGroupItem>
-              <ToggleGroupItem value="hard">Hard</ToggleGroupItem>
-            </ToggleGroup>
+            <p className="text-muted-foreground mb-6">Type the falling words to score points before time runs out. Select your settings and start the challenge!</p>
+            <div className="grid grid-cols-2 gap-8 mb-8">
+              <div className='text-left'>
+                <Label className="font-bold text-lg mb-2 block">Difficulty</Label>
+                <ToggleGroup 
+                  type="single" 
+                  value={difficulty} 
+                  onValueChange={(value: 'easy' | 'medium' | 'hard') => value && setDifficulty(value)}
+                  className="justify-start"
+                  orientation="vertical"
+                >
+                  <ToggleGroupItem value="easy" className="w-full justify-start">Easy</ToggleGroupItem>
+                  <ToggleGroupItem value="medium" className="w-full justify-start">Medium</ToggleGroupItem>
+                  <ToggleGroupItem value="hard" className="w-full justify-start">Hard</ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+              <div className='text-left'>
+                <Label className="font-bold text-lg mb-2 block">Game Duration</Label>
+                <ToggleGroup 
+                  type="single" 
+                  value={String(gameDuration)} 
+                  onValueChange={(value) => value && handleDurationChange(value)}
+                  className="justify-start"
+                  orientation="vertical"
+                >
+                  <ToggleGroupItem value="30" className="w-full justify-start">30 seconds</ToggleGroupItem>
+                  <ToggleGroupItem value="60" className="w-full justify-start">60 seconds</ToggleGroupItem>
+                  <ToggleGroupItem value="90" className="w-full justify-start">90 seconds</ToggleGroupItem>
+                  <ToggleGroupItem value="120" className="w-full justify-start">120 seconds</ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+            </div>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <Button onClick={() => resetGame(difficulty)} size="lg" className="text-xl">Start Game</Button>
+            <Button onClick={() => resetGame(difficulty, gameDuration)} size="lg" className="text-xl">Start Game</Button>
           </CardFooter>
         </Card>
       )}
@@ -344,14 +381,13 @@ export default function TypeFallGame() {
             <p className="text-2xl mb-2">Final Score</p>
             <p className="text-6xl font-bold text-primary mb-6" style={{textShadow: '0 0 10px hsl(var(--primary))'}}>{score}</p>
              <p className="text-lg text-muted-foreground">Difficulty: <span className="capitalize">{difficulty}</span></p>
+             <p className="text-lg text-muted-foreground">Duration: <span className="capitalize">{gameDuration} seconds</span></p>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <Button onClick={() => resetGame(difficulty)} size="lg" className="text-xl">Play Again</Button>
+            <Button onClick={() => setGameState('menu')} size="lg" className="text-xl">Main Menu</Button>
           </CardFooter>
         </Card>
       )}
     </main>
   );
 }
-
-  
