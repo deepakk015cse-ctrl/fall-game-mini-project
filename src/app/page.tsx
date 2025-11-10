@@ -142,6 +142,9 @@ export default function TypeFallGame() {
         setScore((prev) => prev + 10);
         setActiveWords((prev) => prev.filter((_, i) => i !== matchedIndex));
         setInputValue('');
+      } else {
+        setLives((prevLives) => Math.max(0, prevLives - 1));
+        setInputValue('');
       }
     }
   };
