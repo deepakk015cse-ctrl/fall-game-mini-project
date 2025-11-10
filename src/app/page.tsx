@@ -7,13 +7,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Input } from '@/components/ui/input';
 import { WORDS } from '@/lib/words';
 import { cn } from '@/lib/utils';
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+
 
 const INITIAL_LIVES = 5;
 const WORDS_PER_LEVEL = 10;
-const BASE_SPEED = 0.5;
-const SPEED_INCREMENT = 0.1;
-const BASE_SPAWN_RATE = 2000;
-const SPAWN_RATE_DECREMENT = 50;
+
+const DIFFICULTY_SETTINGS = {
+  easy: { baseSpeed: 2, increment: 0.1, spawnRate: 2200, spawnDecrement: 50 },
+  medium: { baseSpeed: 4, increment: 0.15, spawnRate: 1800, spawnDecrement: 75 },
+  hard: { baseSpeed: 6, increment: 0.2, spawnRate: 1400, spawnDecrement: 100 },
+};
+
 const MIN_SPAWN_RATE = 500;
 
 type Word = {
@@ -32,14 +37,16 @@ export default function TypeFallGame() {
   const [inputValue, setInputValue] = useState('');
   const [level, setLevel] = useState(1);
   const [highlightedWord, setHighlightedWord] = useState<string | null>(null);
+  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
 
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastWordId = useRef(0);
   const lastSpawnTime = useRef(Date.now());
 
-  const spawnRate = Math.max(MIN_SPAWN_RATE, BASE_SPAWN_RATE - (level - 1) * SPAWN_RATE_DECREMENT);
-  const wordSpeed = BASE_SPEED + (level - 1) * SPEED_INCREMENT;
+  const { baseSpeed, increment, spawnRate: baseSpawnRate, spawnDecrement } = DIFFICULTY_SETTINGS[difficulty];
+  const spawnRate = Math.max(MIN_SPAWN_RATE, baseSpawnRate - (level - 1) * spawnDecrement);
+  const wordSpeed = baseSpeed + (level - 1) * increment;
 
   const resetGame = useCallback(() => {
     setScore(0);
@@ -71,7 +78,8 @@ export default function TypeFallGame() {
 
   useEffect(() => {
     if (gameState === 'playing') {
-      const gameLoop = (timestamp: number) => {
+      let animationFrameId: number;
+      const gameLoop = () => {
         if (!gameAreaRef.current) return;
         const gameHeight = gameAreaRef.current.offsetHeight;
 
@@ -98,7 +106,7 @@ export default function TypeFallGame() {
         animationFrameId = requestAnimationFrame(gameLoop);
       };
       
-      let animationFrameId = requestAnimationFrame(gameLoop);
+      animationFrameId = requestAnimationFrame(gameLoop);
       return () => cancelAnimationFrame(animationFrameId);
     }
   }, [gameState, spawnRate, spawnWord]);
@@ -151,9 +159,12 @@ export default function TypeFallGame() {
 
   const renderGameStats = () => (
     <div className="absolute top-4 left-4 right-4 flex justify-between items-center text-accent z-10 p-4 bg-background/50 rounded-lg backdrop-blur-sm">
-      <div className="flex items-center gap-2 text-2xl font-bold" style={{textShadow: '0 0 8px hsl(var(--primary))'}}>
-        <Trophy className="w-7 h-7" />
-        <span>Score: {score}</span>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 text-2xl font-bold" style={{textShadow: '0 0 8px hsl(var(--primary))'}}>
+            <Trophy className="w-7 h-7" />
+            <span>Score: {score}</span>
+        </div>
+        <div className="text-xl font-bold text-muted-foreground">Level: {level}</div>
       </div>
       <div className="flex items-center gap-2">
         {Array.from({ length: lives }).map((_, i) => (
@@ -174,7 +185,17 @@ export default function TypeFallGame() {
             <CardTitle className="text-5xl font-bold text-primary" style={{textShadow: '0 0 10px hsl(var(--primary))'}}>TypeFall Challenge</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground mb-6">Type the falling words before they hit the bottom. How long can you survive?</p>
+            <p className="text-muted-foreground mb-6">Type the falling words before they hit the bottom. Select your difficulty and start the challenge!</p>
+            <ToggleGroup 
+              type="single" 
+              value={difficulty} 
+              onValueChange={(value: 'easy' | 'medium' | 'hard') => value && setDifficulty(value)}
+              className="mb-8 justify-center"
+            >
+              <ToggleGroupItem value="easy">Easy</ToggleGroupItem>
+              <ToggleGroupItem value="medium">Medium</ToggleGroupItem>
+              <ToggleGroupItem value="hard">Hard</ToggleGroupItem>
+            </ToggleGroup>
           </CardContent>
           <CardFooter className="flex justify-center">
             <Button onClick={resetGame} size="lg" className="text-xl">Start Game</Button>
@@ -224,6 +245,7 @@ export default function TypeFallGame() {
           <CardContent>
             <p className="text-2xl mb-2">Final Score</p>
             <p className="text-6xl font-bold text-primary mb-6" style={{textShadow: '0 0 10px hsl(var(--primary))'}}>{score}</p>
+             <p className="text-lg text-muted-foreground">Difficulty: <span className="capitalize">{difficulty}</span></p>
           </CardContent>
           <CardFooter className="flex justify-center">
             <Button onClick={resetGame} size="lg" className="text-xl">Play Again</Button>
