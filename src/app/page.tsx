@@ -1,14 +1,23 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Heart, Trophy } from 'lucide-react';
+import { Heart, Trophy, Pause, Play, Settings, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { WORDS } from '@/lib/words';
 import { cn } from '@/lib/utils';
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const INITIAL_LIVES = 5;
 const WORDS_PER_LEVEL = 10;
@@ -31,6 +40,7 @@ type Word = {
 
 export default function TypeFallGame() {
   const [gameState, setGameState] = useState<'menu' | 'playing' | 'gameOver'>('menu');
+  const [isPaused, setIsPaused] = useState(false);
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(INITIAL_LIVES);
   const [activeWords, setActiveWords] = useState<Word[]>([]);
@@ -42,22 +52,27 @@ export default function TypeFallGame() {
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastWordId = useRef(0);
-  const lastSpawnTime = useRef(Date.now());
+  const animationFrameId = useRef<number>();
+  const spawnTimeoutId = useRef<NodeJS.Timeout>();
+
 
   const { baseSpeed, increment, spawnRate: baseSpawnRate, spawnDecrement } = DIFFICULTY_SETTINGS[difficulty];
   const spawnRate = Math.max(MIN_SPAWN_RATE, baseSpawnRate - (level - 1) * spawnDecrement);
   const wordSpeed = baseSpeed + (level - 1) * increment;
 
-  const resetGame = useCallback(() => {
+  const resetGame = useCallback((newDifficulty = difficulty) => {
     setScore(0);
     setLives(INITIAL_LIVES);
     setActiveWords([]);
     setInputValue('');
     setLevel(1);
     setGameState('playing');
+    setIsPaused(false);
+    setDifficulty(newDifficulty);
     lastWordId.current = 0;
     setTimeout(() => inputRef.current?.focus(), 0);
-  }, []);
+  }, [difficulty]);
+
 
   const spawnWord = useCallback(() => {
     if (!gameAreaRef.current) return;
@@ -76,40 +91,44 @@ export default function TypeFallGame() {
     setActiveWords((prev) => [...prev, newWord]);
   }, [wordSpeed]);
 
+  const gameLoop = useCallback(() => {
+    if (!gameAreaRef.current || isPaused) return;
+    const gameHeight = gameAreaRef.current.offsetHeight;
+
+    setActiveWords((prevWords) =>
+      prevWords
+        .map((word) => ({
+          ...word,
+          y: word.y + word.speed,
+        }))
+        .filter((word) => {
+          if (word.y >= gameHeight) {
+            setLives((prevLives) => Math.max(0, prevLives - 1));
+            return false;
+          }
+          return true;
+        })
+    );
+    
+    animationFrameId.current = requestAnimationFrame(gameLoop);
+  }, [isPaused, wordSpeed]);
+
   useEffect(() => {
-    if (gameState === 'playing') {
-      let animationFrameId: number;
-      const gameLoop = () => {
-        if (!gameAreaRef.current) return;
-        const gameHeight = gameAreaRef.current.offsetHeight;
-
-        setActiveWords((prevWords) =>
-          prevWords
-            .map((word) => ({
-              ...word,
-              y: word.y + word.speed,
-            }))
-            .filter((word) => {
-              if (word.y >= gameHeight) {
-                setLives((prevLives) => Math.max(0, prevLives - 1));
-                return false;
-              }
-              return true;
-            })
-        );
-        
-        if(Date.now() - lastSpawnTime.current > spawnRate) {
-          spawnWord();
-          lastSpawnTime.current = Date.now();
-        }
-
-        animationFrameId = requestAnimationFrame(gameLoop);
-      };
-      
-      animationFrameId = requestAnimationFrame(gameLoop);
-      return () => cancelAnimationFrame(animationFrameId);
+    if (gameState === 'playing' && !isPaused) {
+      animationFrameId.current = requestAnimationFrame(gameLoop);
+      spawnTimeoutId.current = setInterval(spawnWord, spawnRate);
+      inputRef.current?.focus();
+    } else {
+      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+      if (spawnTimeoutId.current) clearInterval(spawnTimeoutId.current);
     }
-  }, [gameState, spawnRate, spawnWord]);
+    
+    return () => {
+      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+      if (spawnTimeoutId.current) clearInterval(spawnTimeoutId.current);
+    };
+  }, [gameState, isPaused, spawnRate, gameLoop, spawnWord]);
+
 
   useEffect(() => {
     if (lives <= 0) {
@@ -139,10 +158,12 @@ export default function TypeFallGame() {
   }, [inputValue, activeWords]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isPaused) return;
     setInputValue(e.target.value.toLowerCase().trim());
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isPaused) return;
     if (e.key === 'Enter' && inputValue) {
       const matchedIndex = activeWords.findIndex((word) => word.text === inputValue);
 
@@ -157,6 +178,40 @@ export default function TypeFallGame() {
     }
   };
 
+  const togglePause = () => {
+    if(gameState !== 'playing') return;
+    setIsPaused(prev => !prev);
+  }
+
+  const renderGameMenu = () => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-9 w-9">
+          <Settings className="w-5 h-5" />
+          <span className="sr-only">Game Menu</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Game</DropdownMenuLabel>
+        <DropdownMenuItem onSelect={togglePause}>
+          {isPaused ? <Play className="mr-2" /> : <Pause className="mr-2" />}
+          <span>{isPaused ? 'Resume' : 'Pause'}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => resetGame()}>
+          <RefreshCw className="mr-2" />
+          <span>Restart</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Difficulty</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={difficulty} onValueChange={(value) => setDifficulty(value as 'easy' | 'medium' | 'hard')}>
+          <DropdownMenuRadioItem value="easy">Easy</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="medium">Medium</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="hard">Hard</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   const renderGameStats = () => (
     <div className="absolute top-4 left-4 right-4 flex justify-between items-center text-accent z-10 p-4 bg-background/50 rounded-lg backdrop-blur-sm">
       <div className="flex items-center gap-4">
@@ -166,13 +221,16 @@ export default function TypeFallGame() {
         </div>
         <div className="text-xl font-bold text-muted-foreground">Level: {level}</div>
       </div>
-      <div className="flex items-center gap-2">
-        {Array.from({ length: lives }).map((_, i) => (
-          <Heart key={i} className="w-8 h-8 text-primary fill-primary" style={{filter: 'drop-shadow(0 0 5px hsl(var(--primary)))'}} />
-        ))}
-         {Array.from({ length: INITIAL_LIVES - lives }).map((_, i) => (
-          <Heart key={i} className="w-8 h-8 text-gray-600" />
-        ))}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+            {Array.from({ length: lives }).map((_, i) => (
+            <Heart key={i} className="w-8 h-8 text-primary fill-primary" style={{filter: 'drop-shadow(0 0 5px hsl(var(--primary)))'}} />
+            ))}
+            {Array.from({ length: INITIAL_LIVES - lives }).map((_, i) => (
+            <Heart key={i} className="w-8 h-8 text-gray-600" />
+            ))}
+        </div>
+        {renderGameMenu()}
       </div>
     </div>
   );
@@ -198,13 +256,25 @@ export default function TypeFallGame() {
             </ToggleGroup>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <Button onClick={resetGame} size="lg" className="text-xl">Start Game</Button>
+            <Button onClick={() => resetGame(difficulty)} size="lg" className="text-xl">Start Game</Button>
           </CardFooter>
         </Card>
       )}
 
       {gameState === 'playing' && (
         <div className="relative w-full h-screen" ref={gameAreaRef}>
+          {isPaused && (
+             <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
+                <Card className="w-full max-w-sm text-center">
+                    <CardHeader>
+                        <CardTitle className="text-4xl">Paused</CardTitle>
+                    </CardHeader>
+                    <CardFooter className="flex justify-center">
+                        <Button onClick={togglePause} size="lg">Resume</Button>
+                    </CardFooter>
+                </Card>
+             </div>
+          )}
           {renderGameStats()}
           {activeWords.map((word) => (
             <span
@@ -232,6 +302,7 @@ export default function TypeFallGame() {
                 placeholder="Type here..."
                 className="w-full text-center text-lg h-12 bg-input/80 backdrop-blur-sm focus:ring-2 focus:ring-ring"
                 autoComplete="off"
+                disabled={isPaused}
             />
           </div>
         </div>
@@ -248,7 +319,7 @@ export default function TypeFallGame() {
              <p className="text-lg text-muted-foreground">Difficulty: <span className="capitalize">{difficulty}</span></p>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <Button onClick={resetGame} size="lg" className="text-xl">Play Again</Button>
+            <Button onClick={() => resetGame(difficulty)} size="lg" className="text-xl">Play Again</Button>
           </CardFooter>
         </Card>
       )}
