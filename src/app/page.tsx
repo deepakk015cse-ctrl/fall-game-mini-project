@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -23,9 +24,9 @@ const INITIAL_LIVES = 5;
 const WORDS_PER_LEVEL = 10;
 
 const DIFFICULTY_SETTINGS = {
-  easy: { baseSpeed: 1, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
-  medium: { baseSpeed: 2, increment: 0.15, spawnRate: 2000, spawnDecrement: 75 },
-  hard: { baseSpeed: 3, increment: 0.2, spawnRate: 1500, spawnDecrement: 100 },
+  easy: { baseSpeed: 1.5, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
+  medium: { baseSpeed: 2.5, increment: 0.15, spawnRate: 2000, spawnDecrement: 75 },
+  hard: { baseSpeed: 4, increment: 0.2, spawnRate: 1500, spawnDecrement: 100 },
 };
 
 const MIN_SPAWN_RATE = 500;
@@ -92,34 +93,35 @@ export default function TypeFallGame() {
   }, [wordSpeed]);
 
   const gameLoop = useCallback(() => {
-    if (isPaused) {
+    if (isPaused || gameState !== 'playing') {
       animationFrameId.current = requestAnimationFrame(gameLoop);
       return;
     }
 
-    let livesLost = 0;
     const gameHeight = gameAreaRef.current?.offsetHeight ?? 0;
-
+    
     setActiveWords(prevWords => {
-      const remainingWords = prevWords.filter(word => {
+      const newWords: Word[] = [];
+      let livesToLose = 0;
+
+      for (const word of prevWords) {
         const newY = word.y + word.speed;
         if (newY >= gameHeight) {
-          livesLost++;
-          return false; // Remove the word
+          livesToLose++;
+        } else {
+          newWords.push({ ...word, y: newY });
         }
-        word.y = newY;
-        return true; // Keep the word
-      });
-
-      if (livesLost > 0) {
-        setLives(prevLives => Math.max(0, prevLives - livesLost));
       }
 
-      return remainingWords;
+      if (livesToLose > 0) {
+        setLives(prevLives => Math.max(0, prevLives - livesToLose));
+      }
+      
+      return newWords;
     });
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [isPaused, wordSpeed]);
+  }, [isPaused, gameState, wordSpeed]);
 
 
   useEffect(() => {
@@ -198,7 +200,9 @@ export default function TypeFallGame() {
   const handleDifficultyChange = (value: 'easy' | 'medium' | 'hard') => {
     if (value) {
       setDifficulty(value);
-      resetGame(value);
+      if (gameState === 'playing') {
+        resetGame(value);
+      }
     }
   }
 
@@ -212,7 +216,7 @@ export default function TypeFallGame() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Game</DropdownMenuLabel>
-        <DropdownMenuItem onSelect={togglePause}>
+        <DropdownMenuItem onSelect={togglePause} disabled={gameState !== 'playing'}>
           {isPaused ? <Play className="mr-2 h-4 w-4" /> : <Pause className="mr-2 h-4 w-4" />}
           <span>{isPaused ? 'Resume' : 'Pause'}</span>
         </DropdownMenuItem>
@@ -345,3 +349,5 @@ export default function TypeFallGame() {
     </main>
   );
 }
+
+    
