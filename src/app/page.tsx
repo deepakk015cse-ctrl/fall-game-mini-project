@@ -92,21 +92,30 @@ export default function TypeFallGame() {
   }, [wordSpeed]);
 
   const gameLoop = useCallback(() => {
-    if (!gameAreaRef.current || isPaused) {
+    if (isPaused) {
       animationFrameId.current = requestAnimationFrame(gameLoop);
       return;
     }
-    const gameHeight = gameAreaRef.current.offsetHeight;
+
+    let livesLost = 0;
+    const gameHeight = gameAreaRef.current?.offsetHeight ?? 0;
 
     setActiveWords(prevWords => {
-      const updatedWords = prevWords.map(word => ({ ...word, y: word.y + word.speed }));
-      
-      const missedWords = updatedWords.filter(word => word.y >= gameHeight);
-      if (missedWords.length > 0) {
-        setLives(prevLives => Math.max(0, prevLives - missedWords.length));
+      const remainingWords = prevWords.filter(word => {
+        const newY = word.y + word.speed;
+        if (newY >= gameHeight) {
+          livesLost++;
+          return false; // Remove the word
+        }
+        word.y = newY;
+        return true; // Keep the word
+      });
+
+      if (livesLost > 0) {
+        setLives(prevLives => Math.max(0, prevLives - livesLost));
       }
-      
-      return updatedWords.filter(word => word.y < gameHeight);
+
+      return remainingWords;
     });
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
@@ -168,9 +177,12 @@ export default function TypeFallGame() {
       const matchedIndex = activeWords.findIndex((word) => word.text === inputValue);
 
       if (matchedIndex !== -1) {
-        setScore((prev) => prev + 10);
-        setActiveWords((prev) => prev.filter((_, i) => i !== matchedIndex));
-        setInputValue('');
+        // Prevent life loss if word is already off-screen but not yet removed from state
+        if (gameAreaRef.current && activeWords[matchedIndex].y < gameAreaRef.current.offsetHeight) {
+            setScore((prev) => prev + 10);
+            setActiveWords((prev) => prev.filter((_, i) => i !== matchedIndex));
+            setInputValue('');
+        }
       } else {
         setLives((prevLives) => Math.max(0, prevLives - 1));
         setInputValue('');
