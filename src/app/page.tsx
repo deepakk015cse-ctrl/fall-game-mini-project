@@ -22,11 +22,12 @@ import {
 
 const INITIAL_LIVES = 5;
 const WORDS_PER_LEVEL = 10;
+const POINTS_PER_WORD = 2;
 
 const DIFFICULTY_SETTINGS = {
-  easy: { baseSpeed: 0.5, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
-  medium: { baseSpeed: 0.8, increment: 0.15, spawnRate: 2000, spawnDecrement: 75 },
-  hard: { baseSpeed: 1.2, increment: 0.2, spawnRate: 1500, spawnDecrement: 100 },
+  easy: { baseSpeed: 0.8, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
+  medium: { baseSpeed: 1.2, increment: 0.15, spawnRate: 2000, spawnDecrement: 75 },
+  hard: { baseSpeed: 1.5, increment: 0.2, spawnRate: 1500, spawnDecrement: 100 },
 };
 
 const MIN_SPAWN_RATE = 500;
@@ -98,26 +99,27 @@ export default function TypeFallGame() {
       return;
     }
   
+    let livesToLose = 0;
+    const missedWords: number[] = [];
+
     setActiveWords(prevWords => {
       const gameHeight = gameAreaRef.current?.offsetHeight ?? 0;
-      let livesToLose = 0;
-  
-      const remainingWords = prevWords.filter(word => {
+      
+      const updatedWords = prevWords.map(word => {
         if (word.y >= gameHeight) {
           livesToLose++;
-          return false;
+          missedWords.push(word.id);
+          return null;
         }
-        return true;
-      });
-  
+        return {
+          ...word,
+          y: word.y + word.speed,
+        };
+      }).filter(Boolean) as Word[];
+      
       if (livesToLose > 0) {
         setLives(prevLives => Math.max(0, prevLives - livesToLose));
       }
-  
-      const updatedWords = remainingWords.map(word => ({
-        ...word,
-        y: word.y + word.speed,
-      }));
   
       return updatedWords;
     });
@@ -150,7 +152,7 @@ export default function TypeFallGame() {
   }, [lives]);
   
   useEffect(() => {
-    if (score > 0 && score % (WORDS_PER_LEVEL * 10) === 0) {
+    if (score > 0 && score % (WORDS_PER_LEVEL * POINTS_PER_WORD) === 0) {
       setLevel(prev => prev + 1);
     }
   }, [score]);
@@ -183,7 +185,7 @@ export default function TypeFallGame() {
       if (matchedIndex !== -1) {
         // Prevent life loss if word is already off-screen but not yet removed from state
         if (gameAreaRef.current && activeWords[matchedIndex].y < gameAreaRef.current.offsetHeight) {
-            setScore((prev) => prev + 10);
+            setScore((prev) => prev + POINTS_PER_WORD);
             setActiveWords((prev) => prev.filter((_, i) => i !== matchedIndex));
             setInputValue('');
         }
@@ -351,3 +353,5 @@ export default function TypeFallGame() {
     </main>
   );
 }
+
+  
