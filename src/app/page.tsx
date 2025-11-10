@@ -98,17 +98,25 @@ export default function TypeFallGame() {
     };
     const gameHeight = gameAreaRef.current.offsetHeight;
 
+    let missedWordsCount = 0;
     setActiveWords((prevWords) => {
-        const newWords = prevWords.map((word) => ({ ...word, y: word.y + word.speed }));
-        const missedWords = newWords.filter((word) => word.y >= gameHeight).length;
-        if (missedWords > 0) {
-            setLives((prevLives) => Math.max(0, prevLives - missedWords));
+        const remainingWords = prevWords.filter(word => {
+            if (word.y + word.speed >= gameHeight) {
+                missedWordsCount++;
+                return false;
+            }
+            return true;
+        });
+
+        if (missedWordsCount > 0) {
+            setLives(prevLives => Math.max(0, prevLives - missedWordsCount));
         }
-        return newWords.filter((word) => word.y < gameHeight);
+
+        return remainingWords.map(word => ({ ...word, y: word.y + word.speed }));
     });
     
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [isPaused, wordSpeed]);
+}, [isPaused, wordSpeed]);
 
   useEffect(() => {
     if (gameState === 'playing' && !isPaused) {
