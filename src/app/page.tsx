@@ -23,9 +23,9 @@ const INITIAL_LIVES = 5;
 const WORDS_PER_LEVEL = 10;
 
 const DIFFICULTY_SETTINGS = {
-  easy: { baseSpeed: 2, increment: 0.1, spawnRate: 2200, spawnDecrement: 50 },
-  medium: { baseSpeed: 4, increment: 0.15, spawnRate: 1800, spawnDecrement: 75 },
-  hard: { baseSpeed: 6, increment: 0.2, spawnRate: 1400, spawnDecrement: 100 },
+  easy: { baseSpeed: 1.5, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
+  medium: { baseSpeed: 3, increment: 0.15, spawnRate: 2000, spawnDecrement: 75 },
+  hard: { baseSpeed: 4.5, increment: 0.2, spawnRate: 1500, spawnDecrement: 100 },
 };
 
 const MIN_SPAWN_RATE = 500;
@@ -92,7 +92,10 @@ export default function TypeFallGame() {
   }, [wordSpeed]);
 
   const gameLoop = useCallback(() => {
-    if (!gameAreaRef.current || isPaused) return;
+    if (!gameAreaRef.current || isPaused) {
+      animationFrameId.current = requestAnimationFrame(gameLoop);
+      return;
+    };
     const gameHeight = gameAreaRef.current.offsetHeight;
 
     setActiveWords((prevWords) =>
@@ -183,6 +186,11 @@ export default function TypeFallGame() {
     setIsPaused(prev => !prev);
   }
 
+  const handleDifficultyChange = (value: 'easy' | 'medium' | 'hard') => {
+    setDifficulty(value);
+    resetGame(value);
+  }
+
   const renderGameMenu = () => (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -194,16 +202,16 @@ export default function TypeFallGame() {
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Game</DropdownMenuLabel>
         <DropdownMenuItem onSelect={togglePause}>
-          {isPaused ? <Play className="mr-2" /> : <Pause className="mr-2" />}
+          {isPaused ? <Play className="mr-2 h-4 w-4" /> : <Pause className="mr-2 h-4 w-4" />}
           <span>{isPaused ? 'Resume' : 'Pause'}</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => resetGame()}>
-          <RefreshCw className="mr-2" />
+        <DropdownMenuItem onSelect={() => resetGame(difficulty)}>
+          <RefreshCw className="mr-2 h-4 w-4" />
           <span>Restart</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuLabel>Difficulty</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={difficulty} onValueChange={(value) => setDifficulty(value as 'easy' | 'medium' | 'hard')}>
+        <DropdownMenuRadioGroup value={difficulty} onValueChange={(value) => handleDifficultyChange(value as 'easy' | 'medium' | 'hard')}>
           <DropdownMenuRadioItem value="easy">Easy</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="medium">Medium</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="hard">Hard</DropdownMenuRadioItem>
