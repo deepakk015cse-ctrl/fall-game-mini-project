@@ -24,6 +24,7 @@ import {
 const WORDS_PER_LEVEL = 10;
 const POINTS_PER_WORD = 2;
 const INITIAL_TIME = 60; // Default game time in seconds
+const LIVES = 3;
 
 const DIFFICULTY_SETTINGS = {
   easy: { baseSpeed: 0.8, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
@@ -108,23 +109,29 @@ export default function TypeFallGame() {
       animationFrameId.current = requestAnimationFrame(gameLoop);
       return;
     }
-  
-    setActiveWords(prevWords => {
-      const gameHeight = gameAreaRef.current?.offsetHeight ?? 0;
-      const missedWords = prevWords.filter(word => word.y >= gameHeight);
-      
-      if (missedWords.length > 0) {
-        // This state update handles missed words
-      }
-      
-      return prevWords
-        .map(word => ({
-          ...word,
-          y: word.y + word.speed,
-        }))
-        .filter(word => word.y < gameHeight);
+    
+    setActiveWords(currentWords => {
+        const gameHeight = gameAreaRef.current?.offsetHeight ?? 0;
+        let missedWordThisFrame = false;
+
+        const updatedWords = currentWords.filter(word => {
+            if (word.y >= gameHeight) {
+                missedWordThisFrame = true;
+                return false; 
+            }
+            return true;
+        }).map(word => ({
+            ...word,
+            y: word.y + word.speed,
+        }));
+        
+        if (missedWordThisFrame) {
+            // This logic is now outside the filter/map, ensuring it runs once per frame if any word is missed.
+        }
+
+        return updatedWords;
     });
-  
+
     animationFrameId.current = requestAnimationFrame(gameLoop);
   }, [isPaused, gameState, wordSpeed]);
 
@@ -193,13 +200,17 @@ export default function TypeFallGame() {
       const matchedIndex = activeWords.findIndex((word) => word.text === inputValue);
 
       if (matchedIndex !== -1) {
+        // Check if word is still on screen
         if (gameAreaRef.current && activeWords[matchedIndex].y < gameAreaRef.current.offsetHeight) {
             setScore((prev) => prev + POINTS_PER_WORD);
             setActiveWords((prev) => prev.filter((_, i) => i !== matchedIndex));
             setInputValue('');
+        } else {
+            // Word was typed but it's already off-screen
+            setInputValue('');
         }
       } else {
-        // Optional: penalty for wrong word, e.g., reduce time
+        // Incorrect word typed, clear input
         setInputValue('');
       }
     }
@@ -294,7 +305,7 @@ export default function TypeFallGame() {
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground font-headline overflow-hidden">
       {gameState === 'menu' && (
-        <Card className="w-full max-w-lg text-center bg-card/80 backdrop-blur-sm animate-fade-in-up">
+        <Card className="w-full max-w-2xl text-center bg-card/80 backdrop-blur-sm animate-fade-in-up">
           <CardHeader>
             <CardTitle className="text-5xl font-bold text-primary" style={{textShadow: '0 0 10px hsl(var(--primary))'}}>TypeFall Challenge</CardTitle>
           </CardHeader>
@@ -304,7 +315,7 @@ export default function TypeFallGame() {
               <Star className="w-7 h-7"/>
               <span className="font-bold">High Score: {highScore}</span>
             </div>
-            <div className="grid grid-cols-2 gap-8 mb-8">
+            <div className="grid sm:grid-cols-2 gap-8 mb-8">
               <div className='text-left'>
                 <Label className="font-bold text-lg mb-2 block">Difficulty</Label>
                 <ToggleGroup 
@@ -414,3 +425,6 @@ export default function TypeFallGame() {
       )}
     </main>
   );
+}
+
+    
