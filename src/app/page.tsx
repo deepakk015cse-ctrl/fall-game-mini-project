@@ -23,9 +23,9 @@ const INITIAL_LIVES = 5;
 const WORDS_PER_LEVEL = 10;
 
 const DIFFICULTY_SETTINGS = {
-  easy: { baseSpeed: 1.5, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
-  medium: { baseSpeed: 3, increment: 0.15, spawnRate: 2000, spawnDecrement: 75 },
-  hard: { baseSpeed: 4.5, increment: 0.2, spawnRate: 1500, spawnDecrement: 100 },
+  easy: { baseSpeed: 1, increment: 0.1, spawnRate: 2500, spawnDecrement: 50 },
+  medium: { baseSpeed: 2, increment: 0.15, spawnRate: 2000, spawnDecrement: 75 },
+  hard: { baseSpeed: 3, increment: 0.2, spawnRate: 1500, spawnDecrement: 100 },
 };
 
 const MIN_SPAWN_RATE = 500;
@@ -95,28 +95,23 @@ export default function TypeFallGame() {
     if (!gameAreaRef.current || isPaused) {
       animationFrameId.current = requestAnimationFrame(gameLoop);
       return;
-    };
+    }
     const gameHeight = gameAreaRef.current.offsetHeight;
 
-    let missedWordsCount = 0;
-    setActiveWords((prevWords) => {
-        const remainingWords = prevWords.filter(word => {
-            if (word.y + word.speed >= gameHeight) {
-                missedWordsCount++;
-                return false;
-            }
-            return true;
-        });
-
-        if (missedWordsCount > 0) {
-            setLives(prevLives => Math.max(0, prevLives - missedWordsCount));
-        }
-
-        return remainingWords.map(word => ({ ...word, y: word.y + word.speed }));
+    setActiveWords(prevWords => {
+      const updatedWords = prevWords.map(word => ({ ...word, y: word.y + word.speed }));
+      
+      const missedWords = updatedWords.filter(word => word.y >= gameHeight);
+      if (missedWords.length > 0) {
+        setLives(prevLives => Math.max(0, prevLives - missedWords.length));
+      }
+      
+      return updatedWords.filter(word => word.y < gameHeight);
     });
-    
+
     animationFrameId.current = requestAnimationFrame(gameLoop);
-}, [isPaused, wordSpeed]);
+  }, [isPaused, wordSpeed]);
+
 
   useEffect(() => {
     if (gameState === 'playing' && !isPaused) {
@@ -189,8 +184,10 @@ export default function TypeFallGame() {
   }
 
   const handleDifficultyChange = (value: 'easy' | 'medium' | 'hard') => {
-    setDifficulty(value);
-    resetGame(value);
+    if (value) {
+      setDifficulty(value);
+      resetGame(value);
+    }
   }
 
   const renderGameMenu = () => (
