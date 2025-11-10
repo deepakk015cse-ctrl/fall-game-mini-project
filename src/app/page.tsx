@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Trophy, Clock, Pause, Play, Settings, RefreshCw } from 'lucide-react';
+import { Trophy, Clock, Pause, Play, Settings, RefreshCw, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -45,6 +45,7 @@ export default function TypeFallGame() {
   const [gameState, setGameState] = useState<'menu' | 'playing' | 'gameOver'>('menu');
   const [isPaused, setIsPaused] = useState(false);
   const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(INITIAL_TIME);
   const [gameDuration, setGameDuration] = useState(INITIAL_TIME);
   const [activeWords, setActiveWords] = useState<Word[]>([]);
@@ -63,6 +64,14 @@ export default function TypeFallGame() {
   const { baseSpeed, increment, spawnRate: baseSpawnRate, spawnDecrement } = DIFFICULTY_SETTINGS[difficulty];
   const spawnRate = Math.max(MIN_SPAWN_RATE, baseSpawnRate - (level - 1) * spawnDecrement);
   const wordSpeed = baseSpeed + (level - 1) * increment;
+
+  useEffect(() => {
+    // This code runs only on the client, after the component has mounted.
+    const savedHighScore = localStorage.getItem('typefallHighScore');
+    if (savedHighScore) {
+      setHighScore(parseInt(savedHighScore, 10));
+    }
+  }, []);
 
   const resetGame = useCallback((newDifficulty = difficulty, newDuration = gameDuration) => {
     setScore(0);
@@ -102,18 +111,18 @@ export default function TypeFallGame() {
   
     setActiveWords(prevWords => {
       const gameHeight = gameAreaRef.current?.offsetHeight ?? 0;
+      const missedWords = prevWords.filter(word => word.y >= gameHeight);
       
-      const updatedWords = prevWords.map(word => {
-        if (word.y >= gameHeight) {
-          return null; // Word is missed, will be filtered out
-        }
-        return {
+      if (missedWords.length > 0) {
+        // This state update handles missed words
+      }
+      
+      return prevWords
+        .map(word => ({
           ...word,
           y: word.y + word.speed,
-        };
-      }).filter(Boolean) as Word[];
-      
-      return updatedWords;
+        }))
+        .filter(word => word.y < gameHeight);
     });
   
     animationFrameId.current = requestAnimationFrame(gameLoop);
@@ -145,8 +154,12 @@ export default function TypeFallGame() {
   useEffect(() => {
     if (timeRemaining <= 0 && gameState === 'playing') {
       setGameState('gameOver');
+      if (score > highScore) {
+        setHighScore(score);
+        localStorage.setItem('typefallHighScore', String(score));
+      }
     }
-  }, [timeRemaining, gameState]);
+  }, [timeRemaining, gameState, score, highScore]);
   
   useEffect(() => {
     if (score > 0 && score % (WORDS_PER_LEVEL * POINTS_PER_WORD) === 0) {
@@ -287,6 +300,10 @@ export default function TypeFallGame() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground mb-6">Type the falling words to score points before time runs out. Select your settings and start the challenge!</p>
+            <div className="flex items-center justify-center gap-2 text-2xl mb-8 text-amber-400">
+              <Star className="w-7 h-7"/>
+              <span className="font-bold">High Score: {highScore}</span>
+            </div>
             <div className="grid grid-cols-2 gap-8 mb-8">
               <div className='text-left'>
                 <Label className="font-bold text-lg mb-2 block">Difficulty</Label>
@@ -378,8 +395,15 @@ export default function TypeFallGame() {
             <CardTitle className="text-5xl font-bold text-destructive" style={{textShadow: '0 0 10px hsl(var(--destructive))'}}>Game Over</CardTitle>
           </CardHeader>
           <CardContent>
+            {score > highScore && (
+                <p className="text-2xl mb-4 text-amber-400 font-bold" style={{textShadow: '0 0 8px hsl(var(--primary))'}}>New High Score!</p>
+            )}
             <p className="text-2xl mb-2">Final Score</p>
             <p className="text-6xl font-bold text-primary mb-6" style={{textShadow: '0 0 10px hsl(var(--primary))'}}>{score}</p>
+             <div className="flex items-center justify-center gap-2 text-xl mb-6 text-amber-400">
+                <Star className="w-6 h-6"/>
+                <span className="font-bold">High Score: {highScore}</span>
+             </div>
              <p className="text-lg text-muted-foreground">Difficulty: <span className="capitalize">{difficulty}</span></p>
              <p className="text-lg text-muted-foreground">Duration: <span className="capitalize">{gameDuration} seconds</span></p>
           </CardContent>
@@ -390,4 +414,3 @@ export default function TypeFallGame() {
       )}
     </main>
   );
-}
