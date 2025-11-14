@@ -416,5 +416,4 @@ export default function TypeFallGame() {
       )}
     </main>
   );
-
-    
+}
