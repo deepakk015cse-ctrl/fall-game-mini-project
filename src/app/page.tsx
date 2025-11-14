@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, createRef } from 'react';
 import { Trophy, Clock, Pause, Play, Settings, RefreshCw, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -102,7 +102,7 @@ export default function TypeFallGame() {
       x: Math.random() * (gameWidth - wordWidth),
       y: -20,
       speed: wordSpeed,
-      ref: React.createRef(),
+      ref: createRef(),
     };
     setActiveWords((prev) => [...prev, newWord]);
   }, [wordSpeed]);
@@ -118,7 +118,7 @@ export default function TypeFallGame() {
 
         if (newY < gameHeight) {
           if (word.ref.current) {
-            word.ref.current.style.top = `${newY}px`;
+            word.ref.current.style.transform = `translateY(${newY}px)`;
           }
           updatedWords.push({ ...word, y: newY });
         } else {
@@ -372,7 +372,8 @@ export default function TypeFallGame() {
               )}
               style={{
                 left: `${word.x}px`,
-                top: `${word.y}px`,
+                top: `0px`,
+                transform: `translateY(${word.y}px)`,
                 textShadow: word.text === highlightedWord ? '0 0 10px hsl(var(--primary))' : 'none'
               }}
             >
@@ -420,3 +421,5 @@ export default function TypeFallGame() {
     </main>
   );
 }
+
+    
