@@ -8,7 +8,12 @@
     to {background-position:-10000px 5000px;}
 }
 
-.stars, .twinkling {
+@keyframes move-clouds-back {
+    from {background-position:0 0;}
+    to {background-position:10000px 0;}
+}
+
+.stars, .twinkling, .clouds {
   position:absolute;
   top:0;
   left:0;
@@ -29,6 +34,13 @@
   z-index:1;
   animation:move-twink-back 200s linear infinite;
 }
+
+.clouds{
+    background:transparent url(https://www.script-tutorials.com/demos/360/images/clouds.png) repeat top center;
+    z-index:2;
+    animation:move-clouds-back 200s linear infinite;
+}
+
 
 body {
   font-family: Arial, Helvetica, sans-serif;

@@ -302,6 +302,7 @@ export default function TypeFallGame() {
     <main className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground font-headline overflow-hidden">
         <div className="stars"></div>
         <div className="twinkling"></div>
+        <div className="clouds"></div>
       {gameState === 'menu' && (
         <Card className="w-full max-w-2xl text-center bg-card/80 backdrop-blur-sm animate-fade-in-up z-10">
           <CardHeader>
