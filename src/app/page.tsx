@@ -39,6 +39,7 @@ type Word = {
   x: number;
   y: number;
   speed: number;
+  ref: React.RefObject<HTMLSpanElement>;
 };
 
 export default function TypeFallGame() {
@@ -60,6 +61,9 @@ export default function TypeFallGame() {
   const animationFrameId = useRef<number>();
   const spawnTimeoutId = useRef<NodeJS.Timeout>();
   const timerIntervalId = useRef<NodeJS.Timeout>();
+
+  const wordsRef = useRef<Word[]>([]);
+  wordsRef.current = activeWords;
 
   const { baseSpeed, increment, spawnRate: baseSpawnRate, spawnDecrement } = DIFFICULTY_SETTINGS[difficulty];
   const spawnRate = Math.max(MIN_SPAWN_RATE, baseSpawnRate - (level - 1) * spawnDecrement);
@@ -98,26 +102,36 @@ export default function TypeFallGame() {
       x: Math.random() * (gameWidth - wordWidth),
       y: -20,
       speed: wordSpeed,
+      ref: React.createRef(),
     };
     setActiveWords((prev) => [...prev, newWord]);
   }, [wordSpeed]);
 
   const gameLoop = useCallback(() => {
-    if (!gameAreaRef.current) {
-        animationFrameId.current = requestAnimationFrame(gameLoop);
-        return;
+    if (gameAreaRef.current && !isPaused) {
+      const gameHeight = gameAreaRef.current.offsetHeight;
+      const updatedWords = [];
+      let somethingChanged = false;
+
+      for (const word of wordsRef.current) {
+        const newY = word.y + word.speed;
+
+        if (newY < gameHeight) {
+          if (word.ref.current) {
+            word.ref.current.style.top = `${newY}px`;
+          }
+          updatedWords.push({ ...word, y: newY });
+        } else {
+          somethingChanged = true;
+        }
+      }
+
+      if (somethingChanged) {
+        setActiveWords(updatedWords);
+      }
     }
-    const gameHeight = gameAreaRef.current.offsetHeight;
-
-    setActiveWords(currentWords => {
-        const updatedWords = currentWords
-            .map(word => ({ ...word, y: word.y + word.speed }))
-            .filter(word => word.y < gameHeight);
-        return updatedWords;
-    });
-
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [wordSpeed]);
+  }, [isPaused]);
 
 
   useEffect(() => {
@@ -125,9 +139,7 @@ export default function TypeFallGame() {
       animationFrameId.current = requestAnimationFrame(gameLoop);
       
       spawnTimeoutId.current = setInterval(() => {
-        if(!isPaused){
-           spawnWord();
-        }
+        spawnWord();
       }, spawnRate);
 
       timerIntervalId.current = setInterval(() => {
@@ -353,6 +365,7 @@ export default function TypeFallGame() {
           {activeWords.map((word) => (
             <span
               key={word.id}
+              ref={word.ref}
               className={cn(
                 "absolute font-bold text-lg transition-colors duration-200",
                 word.text === highlightedWord ? "text-primary scale-110" : "text-foreground"
@@ -406,3 +419,4 @@ export default function TypeFallGame() {
       )}
     </main>
   );
+}
