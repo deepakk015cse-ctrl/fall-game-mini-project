@@ -62,8 +62,7 @@ export default function TypeFallGame() {
   const spawnTimeoutId = useRef<NodeJS.Timeout>();
   const timerIntervalId = useRef<NodeJS.Timeout>();
 
-  const wordsRef = useRef<Word[]>([]);
-  wordsRef.current = activeWords;
+  const wordsRef = useRef(new Map<number, { y: number; speed: number; ref: React.RefObject<HTMLSpanElement> }>());
 
   const { baseSpeed, increment, spawnRate: baseSpawnRate, spawnDecrement } = DIFFICULTY_SETTINGS[difficulty];
   const spawnRate = Math.max(MIN_SPAWN_RATE, baseSpawnRate - (level - 1) * spawnDecrement);
@@ -87,6 +86,7 @@ export default function TypeFallGame() {
     setIsPaused(false);
     setDifficulty(newDifficulty);
     lastWordId.current = 0;
+    wordsRef.current.clear();
     setTimeout(() => inputRef.current?.focus(), 0);
   }, [difficulty, gameDuration]);
 
@@ -95,15 +95,18 @@ export default function TypeFallGame() {
     const gameWidth = gameAreaRef.current.offsetWidth;
     const text = WORDS[Math.floor(Math.random() * WORDS.length)];
     const wordWidth = text.length * 12; // A simple approximation for word width
-    
+    const wordId = lastWordId.current++;
+
     const newWord: Word = {
-      id: lastWordId.current++,
+      id: wordId,
       text,
       x: Math.random() * (gameWidth - wordWidth),
       y: -20,
       speed: wordSpeed,
       ref: createRef(),
     };
+    
+    wordsRef.current.set(wordId, { y: newWord.y, speed: newWord.speed, ref: newWord.ref });
     setActiveWords((prev) => [...prev, newWord]);
   }, [wordSpeed]);
 
@@ -111,18 +114,19 @@ export default function TypeFallGame() {
     if (gameAreaRef.current && !isPaused) {
       const gameHeight = gameAreaRef.current.offsetHeight;
       const wordsToRemove: number[] = [];
-      
-      wordsRef.current.forEach(word => {
+  
+      wordsRef.current.forEach((word, id) => {
         word.y += word.speed;
         if (word.ref.current) {
           word.ref.current.style.transform = `translateY(${word.y}px)`;
         }
         if (word.y >= gameHeight) {
-          wordsToRemove.push(word.id);
+          wordsToRemove.push(id);
         }
       });
   
       if (wordsToRemove.length > 0) {
+        wordsToRemove.forEach(id => wordsRef.current.delete(id));
         setActiveWords(prev => prev.filter(word => !wordsToRemove.includes(word.id)));
       }
     }
@@ -199,8 +203,10 @@ export default function TypeFallGame() {
       const matchedIndex = activeWords.findIndex((word) => word.text === inputValue);
 
       if (matchedIndex !== -1) {
-        if (gameAreaRef.current && activeWords[matchedIndex].y < gameAreaRef.current.offsetHeight) {
+        const matchedWord = activeWords[matchedIndex];
+        if (gameAreaRef.current && matchedWord.y < gameAreaRef.current.offsetHeight) {
             setScore((prev) => prev + POINTS_PER_WORD);
+            wordsRef.current.delete(matchedWord.id);
             setActiveWords((prev) => prev.filter((_, i) => i !== matchedIndex));
             setInputValue('');
         } else {
@@ -274,16 +280,16 @@ export default function TypeFallGame() {
   );
 
   const renderGameStats = () => (
-    <div className="absolute top-4 left-4 right-4 flex justify-between items-center text-accent z-10 p-4 bg-background/50 rounded-lg backdrop-blur-sm">
+    <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10 p-4 bg-transparent rounded-lg">
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 text-2xl font-bold" style={{textShadow: '0 0 8px hsl(var(--primary))'}}>
+        <div className="flex items-center gap-2 text-2xl font-bold text-primary" style={{textShadow: '0 0 8px hsl(var(--primary))'}}>
             <Trophy className="w-7 h-7" />
             <span>Score: {score}</span>
         </div>
         <div className="text-xl font-bold text-muted-foreground">Level: {level}</div>
       </div>
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 text-2xl font-bold text-cyan-400" style={{textShadow: '0 0 8px hsl(var(--ring))'}}>
+        <div className="flex items-center gap-2 text-2xl font-bold text-ring" style={{textShadow: '0 0 8px hsl(var(--ring))'}}>
             <Clock className="w-7 h-7" />
             <span>{timeRemaining}s</span>
         </div>
@@ -294,8 +300,10 @@ export default function TypeFallGame() {
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground font-headline overflow-hidden">
+        <div className="stars"></div>
+        <div className="twinkling"></div>
       {gameState === 'menu' && (
-        <Card className="w-full max-w-2xl text-center bg-card/80 backdrop-blur-sm animate-fade-in-up">
+        <Card className="w-full max-w-2xl text-center bg-card/80 backdrop-blur-sm animate-fade-in-up z-10">
           <CardHeader>
             <CardTitle className="text-5xl font-bold text-primary" style={{textShadow: '0 0 10px hsl(var(--primary))'}}>TypeFall Challenge</CardTitle>
           </CardHeader>
@@ -363,7 +371,7 @@ export default function TypeFallGame() {
               key={word.id}
               ref={word.ref}
               className={cn(
-                "absolute font-bold text-lg transition-colors duration-200",
+                "absolute font-bold text-lg transition-colors duration-200 z-10",
                 word.text === highlightedWord ? "text-primary scale-110" : "text-foreground"
               )}
               style={{
@@ -376,7 +384,7 @@ export default function TypeFallGame() {
               {word.text}
             </span>
           ))}
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-full max-w-md px-4">
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-full max-w-md px-4 z-10">
              <Input
                 ref={inputRef}
                 type="text"
@@ -393,7 +401,7 @@ export default function TypeFallGame() {
       )}
 
       {gameState === 'gameOver' && (
-        <Card className="w-full max-w-md text-center bg-card/80 backdrop-blur-sm animate-fade-in-up">
+        <Card className="w-full max-w-md text-center bg-card/80 backdrop-blur-sm animate-fade-in-up z-10">
           <CardHeader>
             <CardTitle className="text-5xl font-bold text-destructive" style={{textShadow: '0 0 10px hsl(var(--destructive))'}}>Time's Up!</CardTitle>
           </CardHeader>
