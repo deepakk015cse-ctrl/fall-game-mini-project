@@ -109,26 +109,18 @@ export default function TypeFallGame() {
 
   const gameLoop = useCallback(() => {
     if (gameAreaRef.current && !isPaused) {
-      const gameHeight = gameAreaRef.current.offsetHeight;
-      const updatedWords = [];
-      let somethingChanged = false;
+        const gameHeight = gameAreaRef.current.offsetHeight;
+        setActiveWords(currentWords => {
+            const updatedWords = currentWords.map(word => {
+                const newY = word.y + word.speed;
+                if (word.ref.current) {
+                    word.ref.current.style.transform = `translateY(${newY}px)`;
+                }
+                return { ...word, y: newY };
+            });
 
-      for (const word of wordsRef.current) {
-        const newY = word.y + word.speed;
-
-        if (newY < gameHeight) {
-          if (word.ref.current) {
-            word.ref.current.style.transform = `translateY(${newY}px)`;
-          }
-          updatedWords.push({ ...word, y: newY });
-        } else {
-          somethingChanged = true;
-        }
-      }
-
-      if (somethingChanged) {
-        setActiveWords(updatedWords);
-      }
+            return updatedWords.filter(word => word.y < gameHeight);
+        });
     }
     animationFrameId.current = requestAnimationFrame(gameLoop);
   }, [isPaused]);
@@ -421,5 +413,3 @@ export default function TypeFallGame() {
     </main>
   );
 }
-
-    
