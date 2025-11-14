@@ -85,7 +85,7 @@ export default function TypeFallGame() {
   }, [difficulty]);
 
   const spawnWord = useCallback(() => {
-    if (!gameAreaRef.current || isPaused) return;
+    if (!gameAreaRef.current) return;
     const gameWidth = gameAreaRef.current.offsetWidth;
     const text = WORDS[Math.floor(Math.random() * WORDS.length)];
     const wordWidth = text.length * 12; // A simple approximation for word width
@@ -98,42 +98,43 @@ export default function TypeFallGame() {
       speed: wordSpeed,
     };
     setActiveWords((prev) => [...prev, newWord]);
-  }, [wordSpeed, isPaused]);
+  }, [wordSpeed]);
 
   const gameLoop = useCallback(() => {
-    if (isPaused || gameState !== 'playing') {
-      animationFrameId.current = requestAnimationFrame(gameLoop);
-      return;
-    }
-
     let missedWordsCount = 0;
     const gameHeight = gameAreaRef.current?.offsetHeight ?? 0;
 
-    setActiveWords(currentWords => 
-      currentWords.filter(word => {
-        if (word.y >= gameHeight) {
-          missedWordsCount++;
-          return false;
+    setActiveWords(currentWords => {
+        const updatedWords = currentWords.filter(word => {
+            if (word.y >= gameHeight) {
+                missedWordsCount++;
+                return false;
+            }
+            return true;
+        }).map(word => ({
+            ...word,
+            y: word.y + word.speed,
+        }));
+        
+        if (missedWordsCount > 0) {
+            setLives(prevLives => Math.max(0, prevLives - missedWordsCount));
         }
-        return true;
-      }).map(word => ({
-        ...word,
-        y: word.y + word.speed,
-      }))
-    );
-
-    if (missedWordsCount > 0) {
-      setLives(prevLives => Math.max(0, prevLives - missedWordsCount));
-    }
+        return updatedWords;
+    });
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [isPaused, gameState, wordSpeed]);
+  }, [wordSpeed]);
 
 
   useEffect(() => {
     if (gameState === 'playing' && !isPaused) {
       animationFrameId.current = requestAnimationFrame(gameLoop);
-      spawnTimeoutId.current = setInterval(spawnWord, spawnRate);
+      const id = setInterval(() => {
+        if(!isPaused){
+           spawnWord();
+        }
+      }, spawnRate);
+      spawnTimeoutId.current = id;
       inputRef.current?.focus();
     } else {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
