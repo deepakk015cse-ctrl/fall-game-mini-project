@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Trophy, Heart, Pause, Play, Settings, RefreshCw, Star } from 'lucide-react';
+import { Trophy, Clock, Pause, Play, Settings, RefreshCw, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -23,14 +23,13 @@ import {
 
 const WORDS_PER_LEVEL = 10;
 const POINTS_PER_WORD = 2;
-const INITIAL_LIVES = 5;
+const INITIAL_GAME_DURATION = 60;
 
 const DIFFICULTY_SETTINGS = {
   easy: { baseSpeed: 0.5, increment: 0.05, spawnRate: 3000, spawnDecrement: 50 },
   medium: { baseSpeed: 0.8, increment: 0.075, spawnRate: 2500, spawnDecrement: 75 },
   hard: { baseSpeed: 1.2, increment: 0.1, spawnRate: 2000, spawnDecrement: 100 },
 };
-
 
 const MIN_SPAWN_RATE = 500;
 
@@ -47,7 +46,8 @@ export default function TypeFallGame() {
   const [isPaused, setIsPaused] = useState(false);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
-  const [lives, setLives] = useState(INITIAL_LIVES);
+  const [timeRemaining, setTimeRemaining] = useState(INITIAL_GAME_DURATION);
+  const [gameDuration, setGameDuration] = useState(INITIAL_GAME_DURATION);
   const [activeWords, setActiveWords] = useState<Word[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [level, setLevel] = useState(1);
@@ -59,6 +59,7 @@ export default function TypeFallGame() {
   const lastWordId = useRef(0);
   const animationFrameId = useRef<number>();
   const spawnTimeoutId = useRef<NodeJS.Timeout>();
+  const timerIntervalId = useRef<NodeJS.Timeout>();
 
   const { baseSpeed, increment, spawnRate: baseSpawnRate, spawnDecrement } = DIFFICULTY_SETTINGS[difficulty];
   const spawnRate = Math.max(MIN_SPAWN_RATE, baseSpawnRate - (level - 1) * spawnDecrement);
@@ -71,9 +72,10 @@ export default function TypeFallGame() {
     }
   }, []);
 
-  const resetGame = useCallback((newDifficulty = difficulty) => {
+  const resetGame = useCallback((newDifficulty = difficulty, newDuration = gameDuration) => {
     setScore(0);
-    setLives(INITIAL_LIVES);
+    setTimeRemaining(newDuration);
+    setGameDuration(newDuration);
     setActiveWords([]);
     setInputValue('');
     setLevel(1);
@@ -82,7 +84,7 @@ export default function TypeFallGame() {
     setDifficulty(newDifficulty);
     lastWordId.current = 0;
     setTimeout(() => inputRef.current?.focus(), 0);
-  }, [difficulty]);
+  }, [difficulty, gameDuration]);
 
   const spawnWord = useCallback(() => {
     if (!gameAreaRef.current) return;
@@ -101,24 +103,16 @@ export default function TypeFallGame() {
   }, [wordSpeed]);
 
   const gameLoop = useCallback(() => {
-    let missedWordsCount = 0;
-    const gameHeight = gameAreaRef.current?.offsetHeight ?? 0;
+    if (!gameAreaRef.current) {
+        animationFrameId.current = requestAnimationFrame(gameLoop);
+        return;
+    }
+    const gameHeight = gameAreaRef.current.offsetHeight;
 
     setActiveWords(currentWords => {
-        const updatedWords = currentWords.filter(word => {
-            if (word.y >= gameHeight) {
-                missedWordsCount++;
-                return false;
-            }
-            return true;
-        }).map(word => ({
-            ...word,
-            y: word.y + word.speed,
-        }));
-        
-        if (missedWordsCount > 0) {
-            setLives(prevLives => Math.max(0, prevLives - missedWordsCount));
-        }
+        const updatedWords = currentWords
+            .map(word => ({ ...word, y: word.y + word.speed }))
+            .filter(word => word.y < gameHeight);
         return updatedWords;
     });
 
@@ -129,34 +123,41 @@ export default function TypeFallGame() {
   useEffect(() => {
     if (gameState === 'playing' && !isPaused) {
       animationFrameId.current = requestAnimationFrame(gameLoop);
-      const id = setInterval(() => {
+      
+      spawnTimeoutId.current = setInterval(() => {
         if(!isPaused){
            spawnWord();
         }
       }, spawnRate);
-      spawnTimeoutId.current = id;
+
+      timerIntervalId.current = setInterval(() => {
+        setTimeRemaining(prev => prev - 1);
+      }, 1000);
+
       inputRef.current?.focus();
     } else {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
       if (spawnTimeoutId.current) clearInterval(spawnTimeoutId.current);
+      if (timerIntervalId.current) clearInterval(timerIntervalId.current);
     }
     
     return () => {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
       if (spawnTimeoutId.current) clearInterval(spawnTimeoutId.current);
+      if (timerIntervalId.current) clearInterval(timerIntervalId.current);
     };
   }, [gameState, isPaused, spawnRate, gameLoop, spawnWord]);
 
 
   useEffect(() => {
-    if (lives <= 0 && gameState === 'playing') {
+    if (timeRemaining <= 0 && gameState === 'playing') {
       setGameState('gameOver');
       if (score > highScore) {
         setHighScore(score);
         localStorage.setItem('typefallHighScore', String(score));
       }
     }
-  }, [lives, gameState, score, highScore]);
+  }, [timeRemaining, gameState, score, highScore]);
   
   useEffect(() => {
     if (score > 0 && score % (WORDS_PER_LEVEL * POINTS_PER_WORD) === 0) {
@@ -212,7 +213,17 @@ export default function TypeFallGame() {
     if (value) {
       setDifficulty(value);
       if (gameState === 'playing') {
-        resetGame(value);
+        resetGame(value, gameDuration);
+      }
+    }
+  }
+
+  const handleDurationChange = (value: string) => {
+    const newDuration = parseInt(value, 10);
+    if (!isNaN(newDuration)) {
+      setGameDuration(newDuration);
+      if (gameState === 'playing') {
+        resetGame(difficulty, newDuration);
       }
     }
   }
@@ -231,7 +242,7 @@ export default function TypeFallGame() {
           {isPaused ? <Play className="mr-2 h-4 w-4" /> : <Pause className="mr-2 h-4 w-4" />}
           <span>{isPaused ? 'Resume' : 'Pause'}</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => resetGame(difficulty)}>
+        <DropdownMenuItem onSelect={() => resetGame(difficulty, gameDuration)}>
           <RefreshCw className="mr-2 h-4 w-4" />
           <span>Restart</span>
         </DropdownMenuItem>
@@ -241,6 +252,14 @@ export default function TypeFallGame() {
           <DropdownMenuRadioItem value="easy">Easy</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="medium">Medium</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="hard">Hard</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Game Duration</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={String(gameDuration)} onValueChange={handleDurationChange}>
+          <DropdownMenuRadioItem value="30">30s</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="60">60s</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="90">90s</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="120">120s</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -256,9 +275,9 @@ export default function TypeFallGame() {
         <div className="text-xl font-bold text-muted-foreground">Level: {level}</div>
       </div>
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 text-2xl font-bold text-red-500" style={{textShadow: '0 0 8px hsl(var(--destructive))'}}>
-            <Heart className="w-7 h-7" />
-            <span>{lives}</span>
+        <div className="flex items-center gap-2 text-2xl font-bold text-cyan-400" style={{textShadow: '0 0 8px hsl(var(--ring))'}}>
+            <Clock className="w-7 h-7" />
+            <span>{timeRemaining}s</span>
         </div>
         {renderGameMenu()}
       </div>
@@ -268,35 +287,50 @@ export default function TypeFallGame() {
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground font-headline overflow-hidden">
       {gameState === 'menu' && (
-        <Card className="w-full max-w-lg text-center bg-card/80 backdrop-blur-sm animate-fade-in-up">
+        <Card className="w-full max-w-2xl text-center bg-card/80 backdrop-blur-sm animate-fade-in-up">
           <CardHeader>
             <CardTitle className="text-5xl font-bold text-primary" style={{textShadow: '0 0 10px hsl(var(--primary))'}}>TypeFall Challenge</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground mb-6">Type the falling words to score points. Don't let them hit the bottom, or you'll lose a life!</p>
+            <p className="text-muted-foreground mb-6">Type the falling words to score points before time runs out!</p>
             <div className="flex items-center justify-center gap-2 text-2xl mb-8 text-amber-400">
               <Star className="w-7 h-7"/>
               <span className="font-bold">High Score: {highScore}</span>
             </div>
-            <div className="flex flex-col gap-8 mb-8">
-              <div className='text-left'>
-                <Label className="font-bold text-lg mb-2 block">Difficulty</Label>
+            <div className="flex flex-col gap-8 mb-8 p-4">
+              <div>
+                <Label className="font-bold text-lg mb-2 block text-left">Difficulty</Label>
                 <ToggleGroup 
                   type="single" 
+                  defaultValue="medium"
                   value={difficulty} 
                   onValueChange={(value: 'easy' | 'medium' | 'hard') => value && setDifficulty(value)}
-                  className="justify-start"
-                  orientation="vertical"
+                  className="grid grid-cols-3"
                 >
-                  <ToggleGroupItem value="easy" className="w-full justify-start">Easy</ToggleGroupItem>
-                  <ToggleGroupItem value="medium" className="w-full justify-start">Medium</ToggleGroupItem>
-                  <ToggleGroupItem value="hard" className="w-full justify-start">Hard</ToggleGroupItem>
+                  <ToggleGroupItem value="easy">Easy</ToggleGroupItem>
+                  <ToggleGroupItem value="medium">Medium</ToggleGroupItem>
+                  <ToggleGroupItem value="hard">Hard</ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+              <div>
+                <Label className="font-bold text-lg mb-2 block text-left">Game Duration (seconds)</Label>
+                 <ToggleGroup 
+                  type="single" 
+                  defaultValue="60"
+                  value={String(gameDuration)} 
+                  onValueChange={(value) => value && handleDurationChange(value)}
+                  className="grid grid-cols-4"
+                >
+                  <ToggleGroupItem value="30">30s</ToggleGroupItem>
+                  <ToggleGroupItem value="60">60s</ToggleGroupItem>
+                  <ToggleGroupItem value="90">90s</ToggleGroupItem>
+                  <ToggleGroupItem value="120">120s</ToggleGroupItem>
                 </ToggleGroup>
               </div>
             </div>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <Button onClick={() => resetGame(difficulty)} size="lg" className="text-xl">Start Game</Button>
+            <Button onClick={() => resetGame(difficulty, gameDuration)} size="lg" className="text-xl">Start Game</Button>
           </CardFooter>
         </Card>
       )}
@@ -351,7 +385,7 @@ export default function TypeFallGame() {
       {gameState === 'gameOver' && (
         <Card className="w-full max-w-md text-center bg-card/80 backdrop-blur-sm animate-fade-in-up">
           <CardHeader>
-            <CardTitle className="text-5xl font-bold text-destructive" style={{textShadow: '0 0 10px hsl(var(--destructive))'}}>Game Over</CardTitle>
+            <CardTitle className="text-5xl font-bold text-destructive" style={{textShadow: '0 0 10px hsl(var(--destructive))'}}>Time's Up!</CardTitle>
           </CardHeader>
           <CardContent>
             {score > highScore && (
@@ -372,4 +406,3 @@ export default function TypeFallGame() {
       )}
     </main>
   );
-}
