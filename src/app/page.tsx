@@ -109,18 +109,22 @@ export default function TypeFallGame() {
 
   const gameLoop = useCallback(() => {
     if (gameAreaRef.current && !isPaused) {
-        const gameHeight = gameAreaRef.current.offsetHeight;
-        setActiveWords(currentWords => {
-            const updatedWords = currentWords.map(word => {
-                const newY = word.y + word.speed;
-                if (word.ref.current) {
-                    word.ref.current.style.transform = `translateY(${newY}px)`;
-                }
-                return { ...word, y: newY };
-            });
-
-            return updatedWords.filter(word => word.y < gameHeight);
-        });
+      const gameHeight = gameAreaRef.current.offsetHeight;
+      const wordsToRemove: number[] = [];
+      
+      wordsRef.current.forEach(word => {
+        word.y += word.speed;
+        if (word.ref.current) {
+          word.ref.current.style.transform = `translateY(${word.y}px)`;
+        }
+        if (word.y >= gameHeight) {
+          wordsToRemove.push(word.id);
+        }
+      });
+  
+      if (wordsToRemove.length > 0) {
+        setActiveWords(prev => prev.filter(word => !wordsToRemove.includes(word.id)));
+      }
     }
     animationFrameId.current = requestAnimationFrame(gameLoop);
   }, [isPaused]);
@@ -236,7 +240,7 @@ export default function TypeFallGame() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-9 w-9">
-          <Settings className="w-5 h-5 text-primary" />
+          <Settings className="w-5 h-5 text-yellow-400" />
           <span className="sr-only">Game Menu</span>
         </Button>
       </DropdownMenuTrigger>
@@ -412,4 +416,5 @@ export default function TypeFallGame() {
       )}
     </main>
   );
-}
+
+    
