@@ -236,7 +236,7 @@ export default function TypeFallGame() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-9 w-9">
-          <Settings className="w-5 h-5" />
+          <Settings className="w-5 h-5 text-primary" />
           <span className="sr-only">Game Menu</span>
         </Button>
       </DropdownMenuTrigger>
